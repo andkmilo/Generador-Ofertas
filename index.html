@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Propuestas Express</title>
+    <title>Propuestas Express | AWS Doc Engine</title>
     <link rel="icon" type="image/png" href="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Escudo_de_Independiente_Santa_Fe.png/1200px-Escudo_de_Independiente_Santa_Fe.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -18,17 +18,26 @@
             <div class="flex justify-center mb-4">
                 <img src="https://upload.wikimedia.org/wikipedia/commons/9/93/Amazon_Web_Services_Logo.svg" alt="AWS Logo" class="h-12 brightness-0 invert">
             </div>
-            <h1 class="text-white text-2xl font-bold mb-2">Propuestas Express</h1>
+            <h1 class="text-white text-2xl font-bold mb-2">AWS Doc Engine</h1>
             <p class="text-gray-400 text-sm leading-relaxed">
-                Generación de propuestas generada con herramientas de IA, recuerda que debes subir el CSV en idioma español
+                Generación de propuestas con Claude 3 & Bedrock. Los servicios se cachean en DynamoDB para optimizar costos.
             </p>
         </div>
 
-        <div class="p-8 space-y-6">
-            <div id="dropZone" class="border-2 border-dashed border-green-300 bg-green-50 rounded-2xl p-8 text-center cursor-pointer hover:bg-green-100 transition-all">
-                <i class="fas fa-cloud-upload-alt text-4xl text-green-500 mb-3"></i>
-                <p id="fileNameDisplay" class="text-gray-600 font-medium">Selecciona el CSV de la Calculadora</p>
-                <input type="file" id="fileInput" accept=".csv" class="hidden">
+        <div class="p-8 space-y-5">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nombre del Proyecto</label>
+                <input type="text" id="projectName" placeholder="Ej: Proyecto Hospital Central" 
+                       class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#ff9900] focus:border-transparent outline-none transition-all">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Archivo de Costos (CSV)</label>
+                <div id="dropZone" class="border-2 border-dashed border-green-300 bg-green-50 rounded-2xl p-6 text-center cursor-pointer hover:bg-green-100 transition-all">
+                    <i class="fas fa-file-csv text-3xl text-green-500 mb-2"></i>
+                    <p id="fileNameDisplay" class="text-gray-600 text-sm font-medium">Subir CSV de la Calculadora</p>
+                    <input type="file" id="fileInput" accept=".csv" class="hidden">
+                </div>
             </div>
 
             <button id="processBtn" class="w-full bg-[#ff9900] hover:bg-[#e68a00] text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
@@ -36,7 +45,7 @@
             </button>
 
             <div id="resultArea" class="hidden mt-4 p-4 bg-blue-50 rounded-2xl text-center border border-blue-200">
-                <p class="text-blue-700 font-bold mb-3">✨ ¡Resumen técnico generado!</p>
+                <p class="text-blue-700 font-bold mb-3">✨ ¡Propuesta Generada!</p>
                 <a id="downloadLink" href="#" class="inline-flex items-center gap-2 bg-green-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-700">
                     <i class="fas fa-file-excel"></i> Descargar Excel
                 </a>
@@ -45,51 +54,64 @@
 
         <div class="p-4 bg-gray-50 text-center border-t border-gray-100">
             <p class="text-[10px] text-gray-400 uppercase tracking-widest">
-                Todos los derechos reservados - Creado por Andres Alfonso 🦁 :)
+                Andres Alfonso 🦁 - AWS Infrastructure & AI
             </p>
         </div>
     </div>
 
     <script>
-        // URL corregida de tu API Gateway
         const API_URL = "https://k11uv8z8r5.execute-api.us-east-1.amazonaws.com/Prod1/generar";
         
         const fileInput = document.getElementById('fileInput');
         const dropZone = document.getElementById('dropZone');
+        const projectNameInput = document.getElementById('projectName');
         const processBtn = document.getElementById('processBtn');
         const resultArea = document.getElementById('resultArea');
 
         dropZone.onclick = () => fileInput.click();
         fileInput.onchange = (e) => {
             const name = e.target.files[0]?.name;
-            if (name) document.getElementById('fileNameDisplay').innerText = `Archivo: ${name}`;
+            if (name) document.getElementById('fileNameDisplay').innerText = name;
         };
 
         processBtn.onclick = async () => {
             const file = fileInput.files[0];
-            if (!file) return alert("Sube el archivo primero");
+            const projectName = projectNameInput.value.trim();
+
+            if (!projectName) return alert("Por favor, ingresa el nombre del proyecto");
+            if (!file) return alert("Por favor, selecciona un archivo CSV");
 
             processBtn.disabled = true;
-            processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+            processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Consultando Dynamo/Bedrock...';
 
             try {
+                // Paso 1: Obtener URL de subida enviando el nombre del proyecto para el cache
                 const resUrl = await fetch(API_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ action: "get_upload_url", file_name: file.name })
+                    body: JSON.stringify({ 
+                        action: "get_upload_url", 
+                        file_name: file.name,
+                        project_name: projectName // Se envía a Dynamo
+                    })
                 });
                 const presignedData = await resUrl.json();
 
                 if (!presignedData.fields) throw new Error("Error en la respuesta de la API");
 
+                // Paso 2: Subir archivo a S3
                 const formData = new FormData();
                 Object.entries(presignedData.fields).forEach(([k, v]) => formData.append(k, v));
                 formData.append("file", file);
-
                 await fetch(presignedData.url, { method: 'POST', body: formData });
 
+                // Paso 3: Procesar (Aquí la Lambda revisa si el servicio está en la tabla de Dynamo antes de ir a Bedrock)
                 const resProc = await fetch(API_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ action: "process", file_name: file.name })
+                    body: JSON.stringify({ 
+                        action: "process", 
+                        file_name: file.name,
+                        project_name: projectName 
+                    })
                 });
                 const dataProc = await resProc.json();
 
@@ -99,9 +121,9 @@
                     processBtn.innerHTML = '<i class="fas fa-check"></i> Propuesta Lista';
                 }
             } catch (err) {
-                alert("Hubo un error: " + err.message);
+                alert("Error en el flujo: " + err.message);
                 processBtn.disabled = false;
-                processBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Generar Propuesta';
+                processBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Reintentar Generación';
             }
         };
     </script>
