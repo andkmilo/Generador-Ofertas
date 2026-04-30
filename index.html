@@ -3,12 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <title>Propuestas Express | AWS Doc Engine</title>
-    <link rel="icon" type="image/png" href="https://img.planetafichajes.com/escudos/independiente-santa-fe.png">
+    <link rel="icon" type="image/png" href="https://upload.wikimedia.org/wikipedia/commons/9/93/Amazon_Web_Services_Logo.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        /* Efecto de pulso suave cuando se arrastra un archivo */
+        .drag-active {
+            background-color: #dcfce7 !important;
+            border-color: #22c55e !important;
+            transform: scale(1.02);
+        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
@@ -33,9 +39,10 @@
 
             <div>
                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Archivo de Costos (CSV)</label>
-                <div id="dropZone" class="border-2 border-dashed border-green-300 bg-green-50 rounded-2xl p-6 text-center cursor-pointer hover:bg-green-100 transition-all">
+                <!-- ZONA DE ARRASTRE MEJORADA -->
+                <div id="dropZone" class="border-2 border-dashed border-green-300 bg-green-50 rounded-2xl p-6 text-center cursor-pointer hover:bg-green-100 transition-all duration-200">
                     <i class="fas fa-file-csv text-3xl text-green-500 mb-2"></i>
-                    <p id="fileNameDisplay" class="text-gray-600 text-sm font-medium">Subir CSV de la Calculadora</p>
+                    <p id="fileNameDisplay" class="text-gray-600 text-sm font-medium">Arrastra aquí o haz clic para subir</p>
                     <input type="file" id="fileInput" accept=".csv" class="hidden">
                 </div>
             </div>
@@ -54,7 +61,7 @@
 
         <div class="p-4 bg-gray-50 text-center border-t border-gray-100">
             <p class="text-[10px] text-gray-400 uppercase tracking-widest">
-                Andres Alfonso 🦁 - AWS Infrastructure & AI
+                Andres Alfonso 🦁 - Todos los derechos reservados
             </p>
         </div>
     </div>
@@ -67,36 +74,72 @@
         const projectNameInput = document.getElementById('projectName');
         const processBtn = document.getElementById('processBtn');
         const resultArea = document.getElementById('resultArea');
+        const fileNameDisplay = document.getElementById('fileNameDisplay');
 
+        // --- LÓGICA DE SELECCIÓN Y ARRASTRE ---
+
+        // Abrir selector al hacer clic
         dropZone.onclick = () => fileInput.click();
-        fileInput.onchange = (e) => {
-            const name = e.target.files[0]?.name;
-            if (name) document.getElementById('fileNameDisplay').innerText = name;
+
+        // Detectar archivo seleccionado por botón
+        fileInput.onchange = (e) => handleFile(e.target.files[0]);
+
+        // Eventos de arrastre
+        dropZone.ondragover = (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-active');
         };
+
+        dropZone.ondragleave = () => {
+            dropZone.classList.remove('drag-active');
+        };
+
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-active');
+            const file = e.dataTransfer.files[0];
+            handleFile(file);
+        };
+
+        function handleFile(file) {
+            if (file && file.name.endsWith('.csv')) {
+                // Sincronizar el input con el archivo soltado
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInput.files = dataTransfer.files;
+                
+                fileNameDisplay.innerText = file.name;
+                fileNameDisplay.classList.add('text-green-700', 'font-bold');
+            } else {
+                alert("Por favor, sube un archivo con extensión .csv");
+            }
+        }
+
+        // --- LÓGICA DE PROCESAMIENTO ---
 
         processBtn.onclick = async () => {
             const file = fileInput.files[0];
             const projectName = projectNameInput.value.trim();
 
             if (!projectName) return alert("Por favor, ingresa el nombre del proyecto");
-            if (!file) return alert("Por favor, selecciona un archivo CSV");
+            if (!file) return alert("Por favor, selecciona o arrastra un archivo CSV");
 
             processBtn.disabled = true;
-            processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Consultando Dynamo/Bedrock...';
+            processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando con IA...';
 
             try {
-                // Paso 1: Obtener URL de subida enviando el nombre del proyecto para el cache
+                // Paso 1: Obtener URL de subida
                 const resUrl = await fetch(API_URL, {
                     method: 'POST',
                     body: JSON.stringify({ 
                         action: "get_upload_url", 
                         file_name: file.name,
-                        project_name: projectName // Se envía a Dynamo
+                        project_name: projectName 
                     })
                 });
                 const presignedData = await resUrl.json();
 
-                if (!presignedData.fields) throw new Error("Error en la respuesta de la API");
+                if (!presignedData.fields) throw new Error("Error obteniendo URL de S3");
 
                 // Paso 2: Subir archivo a S3
                 const formData = new FormData();
@@ -104,7 +147,7 @@
                 formData.append("file", file);
                 await fetch(presignedData.url, { method: 'POST', body: formData });
 
-                // Paso 3: Procesar (Aquí la Lambda revisa si el servicio está en la tabla de Dynamo antes de ir a Bedrock)
+                // Paso 3: Procesar en Lambda (Lógica de limpieza y Bedrock)
                 const resProc = await fetch(API_URL, {
                     method: 'POST',
                     body: JSON.stringify({ 
