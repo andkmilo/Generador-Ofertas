@@ -63,12 +63,11 @@
         box-shadow: 0 6px 16px -6px rgba(0,0,0,0.4);
     }
     .header .logo-img {
-        height: 30px;
-        width: auto;
-        object-fit: contain;
         display: block;
+        height: 34px;
     }
-    .header .logo-azure-svg { height: 30px; }
+    .header .logo-aws { width: 56px; height: 34px; }
+    .header .logo-azure-svg { width: 34px; height: 34px; }
     .header .logo-sep {
         width: 1px;
         height: 26px;
@@ -126,9 +125,8 @@
         cursor: pointer;
         transition: all 0.2s ease;
     }
-    .tab .tab-logo { height: 16px; width: auto; object-fit: contain; }
-    /* La pestana AWS activa va sobre fondo blanco: si el logo es blanco, se oscurece */
-    .tab[data-provider="aws"] .tab-logo { filter: none; }
+    .tab .tab-logo { height: 18px; width: 26px; vertical-align: middle; }
+    .tab[data-provider="azure"] .tab-logo { width: 18px; }
     .tab:hover { color: #374151; }
     .tab.active {
         background: #fff;
